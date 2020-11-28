@@ -1,0 +1,155 @@
+---
+title: "Paired t-tests"
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: console
+---
+
+
+ 
+### SETUP
+```{r}
+
+needed_packages <- c("pastecs", "ggplot2", "psych", "semTools", "FSA", "car", "coin", "rstatix","effectsize")                      
+# Extract not installed packages
+not_installed <- needed_packages[!(needed_packages %in% installed.packages()[ , "Package"])]    
+# Install not installed packages
+if(length(not_installed)) install.packages(not_installed) 
+
+library(pastecs) #For creating descriptive statistic summaries
+library(ggplot2) #For creating histograms with more detail than plot
+library(psych) # Some useful descriptive functions
+library(semTools) #For skewness and kurtosis
+library(FSA) #For percentage
+library(car) # For Levene's test for homogeneity of variance 
+library(effectsize) #To calculate effect size for t-test
+```
+### Load Data
+
+```{r}
+#Read Math dataset from CSV
+d1=read.table("student-mat.csv",sep=";",header=TRUE)
+d2=read.table("student-por.csv",sep=";",header=TRUE)
+#Merge both datasets
+d3=merge(d1,d2,by=c("school","sex","age","address","famsize","Pstatus","Medu","Fedu","Mjob","Fjob","reason","nursery","internet"))
+```
+### Normality Test for Math Grade-2
+
+##### Plot histogram
+
+```{r}
+#Analyze the normal distribution of Math Grade-2
+gg<-ggplot(data = d3,mapping = aes(x=d3$G2.x))
+#Change the label of the x axis
+gg <- gg + labs(x="Math Grade-2")
+
+#manage binwidth and colours
+gg <- gg + geom_histogram(binwidth=2, colour="black", aes(y=..density.., fill=..count..))
+gg <- gg + scale_fill_gradient("Count", low="#EBF5FB", high="#1B4F72")
+
+#adding a normal curve
+#use stat_function to compute a normalised score for each value of tpcoiss
+#pass the mean and standard deviation
+#use the na.rm parameter to say how missing values are handled
+gg <- gg + stat_function(fun=dnorm, color="red",args=list(mean=mean(d3$G2.x, na.rm=TRUE), sd=sd(d3$G2.x, na.rm=TRUE)))
+gg
+```
+
+##### Plot Q-Q Plot
+```{r}
+#Create a qqplot
+qqnorm(d3$G2.x)
+qqline(d3$G2.x, col=2) #show a line on theplot
+```
+
+##### Summary Statistics
+
+```{r}
+#stat.desc is a function from pastecs - make sure you include the basic switch=F to ensure you don't get scienfitic notation
+stat.desc(d3$G2.x, basic=F)
+```
+
+##### Skew and kurtosis Test:
+The standardized scores(value/std. error) for Skewness and kurtosis between +/- 2 are considered acceptable in order to prove **normal univariate distribution**.
+
+```{r}
+#We can make our decision based on the value of the standardised score for skew and kurtosis
+#We divide the skew statistic by the standard error to get the standardised score
+#This will indicate if we have a problem
+tpskew<-skew(d3$G2.x)
+tpskew[1]/tpskew[2]
+
+tpkurt<-kurtosis(d3$G2.x)
+tpkurt[1]/tpkurt[2]
+```
+As the standardized scores of the Skew and kurtosis is outside of +/- 2 the impact need to be accessed. We need to check how much percentage of standardized score falling outside of 1.96. If it is less than 5%, then it is safe to say as a ***Normal Distribution***.
+
+As the number of sample is more than 80, we need to getback with the percentage of observation falling outside 3.29.
+
+```{r}
+#and by calculating the percentage of standardised scores for the variable itself that are outside our acceptable range
+#This will tell us how big a problem we have
+# Calculate the percentage of standardised scores that are greated than 1.96
+# the perc function which is part of the FSA package which calculate the percentage that are within a range - you can look for greater than "gt", greater than or equal "geq", "gt", less than or equal "leq",  or less than "lt"),
+# scale is a function that creates z scores, abs gets absolute value
+
+ztpcoiss<- abs(scale(d3$G2.x))
+
+perc(as.numeric(ztpcoiss), 1.96, "gt")
+perc(as.numeric(ztpcoiss), 3.29, "gt")
+```
+Math Grade-1 is normal as per the previous test.
+Math Grade-2 is now found to be normal.
+
+### Parametric Tests
+#### Paired t-test
+
+H0 (Null): There is no difference in Math Grade score for students at different point of time
+
+Ha (Alternate): There is a difference in Math Grade score for students at different point of time
+
+
+Conduct the t-test from package stats.
+```{r}
+
+mean(d3$G1.x)
+sd(d3$G1.x)
+mean(d3$G2.x)
+sd(d3$G2.x)
+
+
+stats::t.test(d3$G1.x,d3$G2.x,paired=T)
+#No statistically significant difference was found
+
+res <- stats::t.test(d3$G1.x,d3$G2.x,paired=T)
+#Calculate Cohen's d
+#artithmetically
+effcd=round((2*res$statistic)/sqrt(res$parameter),2)
+effcd
+#Using function from effectsize package
+effectsize::t_to_d(t = res$statistic, res$parameter)
+
+
+#Eta squared calculation
+effes=round((res$statistic*res$statistic)/((res$statistic*res$statistic)+(res$parameter)),3)
+effes
+
+
+```
+### Reporting the results with Cohen's d effect
+
+```
+"A paired-samples t-test was conducted to evaluate the impact of the intervension on students' scores on the Math.No statistically significant difference in Math score was found from Time 1 (M=10.86, SD= 3.35) to Time 2 (M=10.71, SD= 3.83), (t(`r res$parameter`)= `r round(res$statistic,3)`), p = `r round(res$p.value,2)`. Cohen's d also indicated a very small effect size (`r effcd`)."
+
+```
+
+### Reporting the results with eta squred effect
+
+```
+"A paired-samples t-test was conducted to evaluate the impact of the intervension on students' scores on the Math.No statistically significant difference in Math score was found from Time 1 (M=10.86, SD= 3.35) to Time 2 (M=10.71, SD= 3.83), (t(`r res$parameter`)= `r round(res$statistic,3)`), p = `r round(res$p.value,2)`. A very small effect size was also indicted by the eta squared value (`r effes`)."
+
+```
+
+
